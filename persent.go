@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"sort"
 	s "strings"
 
+	"github.com/bradfitz/slice"
 	"github.com/cdipaolo/sentiment"
 	// "github.com/codegangsta/cli"
 	"github.com/google/go-github/github"
@@ -20,6 +20,19 @@ type SentComm struct {
 	author string
 	score  uint8
 	text   string
+}
+
+// SentScore is a sentiment score with comments by an author
+type SentScore struct {
+	percentPositive float32
+	totalComments   int
+	author          string
+	comments        []SentComm
+}
+
+// NewSentScore makes a new SentScore
+func NewSentScore(author string, percentPositive float32, comments []SentComm) *SentScore {
+	return &SentScore{author: author, percentPositive: percentPositive, comments: comments, totalComments: len(comments)}
 }
 
 // NewSentComm makes a new SentComm
@@ -37,26 +50,40 @@ func check(e error) {
 
 func main() {
 	orgName, repoName := parseArgs(os.Args[1:])
+	sentimentComments := analyze(fetch(orgName, repoName))
 
 	commentsByAuthor := make(map[string][]SentComm)
-	for _, c := range analyze(orgName, repoName) {
+	for _, c := range sentimentComments {
 		commentsByAuthor[c.author] = append(commentsByAuthor[c.author], c)
 	}
 
-	var authors []string
+	var scores []SentScore
+
 	for k := range commentsByAuthor {
-		authors = append(authors, k)
-	}
-	sort.Strings(authors)
-
-	for _, k := range authors {
-		positive := uint32(0)
+		positiveScore := uint32(0)
 		for _, c := range commentsByAuthor[k] {
-			positive = positive + uint32(c.score)
+			positiveScore = positiveScore + uint32(c.score)
 		}
-		fmt.Printf("%s: %.2f%% (%d/%d)\n", k, ((float32(positive) / float32(len(commentsByAuthor[k]))) * 100), positive, len(commentsByAuthor[k]))
+
+		totalComments := len(commentsByAuthor[k])
+		percentPositive := (float32(positiveScore) / float32(totalComments)) * 100
+
+		scores = append(scores, *NewSentScore(k, percentPositive, commentsByAuthor[k]))
 	}
 
+	slice.Sort(scores[:], func(i, j int) bool {
+		return scores[i].totalComments > scores[j].totalComments
+	})
+
+	for _, v := range scores {
+		fmt.Printf("%s: %.0f%% of %d\n", v.author, v.percentPositive, v.totalComments)
+	}
+
+	// slice.Sort(planets[:], func(i, j int) bool {
+	// 	return planets[i].Axis < planets[j].Axis
+	// })
+
+	// fmt.Printf("%s: %.0f%% (%d/%d)\n", k, percentPositive, positiveScore, totalComments)
 	// fmt.Printf("%# v\n", pretty.Formatter(commentsByAuthor))
 }
 
@@ -75,7 +102,19 @@ func parseArgs(argv []string) (orgName, repoName string) {
 	return
 }
 
-func analyze(orgName string, repoName string) (sentComms []SentComm) {
+func analyze(comments []github.PullRequestComment) []SentComm {
+	analysisModel, _ := sentiment.Restore()
+
+	var sentComms []SentComm
+
+	for _, v := range comments {
+		sentComms = append(sentComms, *NewSentComm(v, analysisModel))
+	}
+
+	return sentComms
+}
+
+func fetch(orgName string, repoName string) []github.PullRequestComment {
 	ghTokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: os.Getenv("GITHUB_API_TOKEN")})
 	client := github.NewClient(oauth2.NewClient(oauth2.NoContext, ghTokenSource))
 
@@ -104,15 +143,9 @@ func analyze(orgName string, repoName string) (sentComms []SentComm) {
 		writeToFile(comments, fileName)
 	}
 
-	model, _ := sentiment.Restore()
-
-	for _, v := range comments {
-		sentComms = append(sentComms, *NewSentComm(v, model))
-	}
-
 	log.Printf("Total: %v\n", len(comments))
 
-	return
+	return comments
 }
 
 func writeToFile(comments []github.PullRequestComment, fileName string) string {
