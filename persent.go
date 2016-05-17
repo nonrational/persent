@@ -11,7 +11,6 @@ import (
 	"github.com/cdipaolo/sentiment"
 	// "github.com/codegangsta/cli"
 	"github.com/google/go-github/github"
-	"github.com/kr/pretty"
 	"golang.org/x/oauth2"
 )
 
@@ -37,7 +36,23 @@ func check(e error) {
 
 func main() {
 	orgName, repoName := parseArgs(os.Args[1:])
-	analyze(orgName, repoName)
+
+	commentsByAuthor := make(map[string][]SentComm)
+	for _, c := range analyze(orgName, repoName) {
+		commentsByAuthor[c.author] = append(commentsByAuthor[c.author], c)
+	}
+
+	authorSentiment := make(map[string]float32)
+	for k := range commentsByAuthor {
+		positive := uint32(0)
+		for _, c := range commentsByAuthor[k] {
+			positive = positive + uint32(c.score)
+		}
+		authorSentiment[k] = (float32(positive) / float32(len(commentsByAuthor[k]))) * 100
+
+		fmt.Printf("%s: %.1f%%\n", k, authorSentiment[k])
+	}
+	// fmt.Printf("%# v\n", pretty.Formatter(authorSentiment))
 }
 
 func parseArgs(argv []string) (orgName, repoName string) {
@@ -55,7 +70,7 @@ func parseArgs(argv []string) (orgName, repoName string) {
 	return
 }
 
-func analyze(orgName string, repoName string) {
+func analyze(orgName string, repoName string) (sentComms []SentComm) {
 	ghTokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: os.Getenv("GITHUB_API_TOKEN")})
 	client := github.NewClient(oauth2.NewClient(oauth2.NoContext, ghTokenSource))
 
@@ -86,13 +101,13 @@ func analyze(orgName string, repoName string) {
 
 	model, _ := sentiment.Restore()
 
-	var sentComms []SentComm
 	for _, v := range comments {
 		sentComms = append(sentComms, *NewSentComm(v, model))
 	}
 
-	fmt.Printf("%# v\n", pretty.Formatter(sentComms))
 	log.Printf("Total: %v\n", len(comments))
+
+	return
 }
 
 func writeToFile(comments []github.PullRequestComment, fileName string) string {
