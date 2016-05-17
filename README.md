@@ -1,4 +1,4 @@
-# persent
+# persent [![Build Status](https://travis-ci.org/nonrational/persent.svg?branch=master)](https://travis-ci.org/nonrational/persent)
 
 Silly Pull Request Comment Sentiment Analysis in Go
 
