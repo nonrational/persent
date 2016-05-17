@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sort"
 	s "strings"
 
 	"github.com/cdipaolo/sentiment"
@@ -42,17 +43,19 @@ func main() {
 		commentsByAuthor[c.author] = append(commentsByAuthor[c.author], c)
 	}
 
-	authorSentiment := make(map[string]float32)
+	var authors []string
 	for k := range commentsByAuthor {
+		authors = append(authors, k)
+	}
+	sort.Strings(authors)
+
+	for _, k := range authors {
 		positive := uint32(0)
 		for _, c := range commentsByAuthor[k] {
 			positive = positive + uint32(c.score)
 		}
-		authorSentiment[k] = (float32(positive) / float32(len(commentsByAuthor[k]))) * 100
-
-		fmt.Printf("%s: %.1f%%\n", k, authorSentiment[k])
+		fmt.Printf("%s: %.1f%%\n", k, ((float32(positive) / float32(len(commentsByAuthor[k]))) * 100))
 	}
-	// fmt.Printf("%# v\n", pretty.Formatter(authorSentiment))
 }
 
 func parseArgs(argv []string) (orgName, repoName string) {
