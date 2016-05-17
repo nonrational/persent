@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"os"
+	"regexp"
 	s "strings"
 
 	"github.com/bradfitz/slice"
@@ -71,25 +73,29 @@ func main() {
 		scores = append(scores, *NewSentScore(k, percentPositive, commentsByAuthor[k]))
 	}
 
+	for _, v := range topCommenters(scores) {
+		fmt.Printf("%s: %.0f%% of %d\n", v.author, v.percentPositive, v.totalComments)
+	}
+}
+
+func topCommenters(scores []SentScore) (topCommenters []SentScore) {
 	slice.Sort(scores[:], func(i, j int) bool {
 		return scores[i].totalComments > scores[j].totalComments
 	})
-
-	for _, v := range scores {
-		fmt.Printf("%s: %.0f%% of %d\n", v.author, v.percentPositive, v.totalComments)
-	}
-
-	// slice.Sort(planets[:], func(i, j int) bool {
-	// 	return planets[i].Axis < planets[j].Axis
-	// })
-
-	// fmt.Printf("%s: %.0f%% (%d/%d)\n", k, percentPositive, positiveScore, totalComments)
 	// fmt.Printf("%# v\n", pretty.Formatter(commentsByAuthor))
+	maxIdx := int(math.Min(10, float64(len(scores))))
+	topCommenters = scores[0:maxIdx]
+
+	return
 }
 
 func parseArgs(argv []string) (orgName, repoName string) {
-	if len(argv) == 1 && s.Contains(argv[0], "/") {
-		orgAndRepo := s.Split(argv[0], "/")
+	r, _ := regexp.Compile(`\w+[/.]\w+`)
+
+	if len(argv) == 1 && r.MatchString(argv[0]) {
+		dotOrSlash := func(c rune) bool { return c == '/' || c == '.' }
+		orgAndRepo := s.FieldsFunc(argv[0], dotOrSlash)
+
 		orgName = orgAndRepo[0]
 		repoName = orgAndRepo[1]
 	} else if len(argv) == 2 {
