@@ -1,10 +1,7 @@
-# semper
+# persent
 
-<i>Sem</i>antic _PR_. A silly CLI to analyze the mood of your pull requests.
-
-> Always.<br>
-> &nbsp;&nbsp;&nbsp;&nbsp; ~ Severus Snape
+Silly Pull Request Comment Sentiment Analysis in Go
 
 ## Usage
 
-`semper https://github.com/foo/bar`
+`persent <owner>/<repo>`
