@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	s "strings"
 
 	"github.com/cdipaolo/sentiment"
 	// "github.com/codegangsta/cli"
@@ -35,17 +36,23 @@ func check(e error) {
 }
 
 func main() {
-	argv := os.Args[1:]
+	orgName, repoName := parseArgs(os.Args[1:])
+	analyze(orgName, repoName)
+}
 
-	if len(argv) < 2 {
+func parseArgs(argv []string) (orgName, repoName string) {
+	if len(argv) == 1 && s.Contains(argv[0], "/") {
+		orgAndRepo := s.Split(argv[0], "/")
+		orgName = orgAndRepo[0]
+		repoName = orgAndRepo[1]
+	} else if len(argv) == 2 {
+		orgName = argv[0]
+		repoName = argv[1]
+	} else {
 		log.Fatal("usage: persent owner repo")
 		os.Exit(1)
 	}
-
-	orgName := argv[0]
-	repoName := argv[1]
-
-	analyze(orgName, repoName)
+	return
 }
 
 func analyze(orgName string, repoName string) {
