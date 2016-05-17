@@ -54,8 +54,10 @@ func main() {
 		for _, c := range commentsByAuthor[k] {
 			positive = positive + uint32(c.score)
 		}
-		fmt.Printf("%s: %.1f%%\n", k, ((float32(positive) / float32(len(commentsByAuthor[k]))) * 100))
+		fmt.Printf("%s: %.2f%% (%d/%d)\n", k, ((float32(positive) / float32(len(commentsByAuthor[k]))) * 100), positive, len(commentsByAuthor[k]))
 	}
+
+	// fmt.Printf("%# v\n", pretty.Formatter(commentsByAuthor))
 }
 
 func parseArgs(argv []string) (orgName, repoName string) {
