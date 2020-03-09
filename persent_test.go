@@ -5,8 +5,17 @@ import (
 	"os"
 	"os/exec"
 	"testing"
-	// "github.com/nonrational/persent"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestRun(t *testing.T) {
+	scores := CalculatePersent("puma", "puma-dev")
+
+	numScores := len(*scores)
+
+	assert.Equal(t, 9, numScores)
+}
 
 func TestTopCommenters_shortArray(t *testing.T) {
 	var smallDummyScores []SentScore

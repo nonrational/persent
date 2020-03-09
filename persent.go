@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -8,11 +9,10 @@ import (
 	"math"
 	"os"
 	"regexp"
-	s "strings"
+	"strings"
 
 	"github.com/bradfitz/slice"
 	"github.com/cdipaolo/sentiment"
-	// "github.com/codegangsta/cli"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
@@ -38,21 +38,25 @@ func NewSentScore(author string, percentPositive float32, comments []SentComm) *
 }
 
 // NewSentComm makes a new SentComm
-func NewSentComm(ghprc github.PullRequestComment, model sentiment.Models) *SentComm {
+func NewSentComm(ghprc *github.PullRequestComment, model sentiment.Models) *SentComm {
 	analysis := model.SentimentAnalysis(*ghprc.Body, sentiment.English)
 
 	return &SentComm{author: *ghprc.User.Login, score: analysis.Score, text: *ghprc.Body}
 }
 
-func check(e error) {
-	if e != nil {
-		panic(e)
+func main() {
+	orgName, repoName := parseArgs(os.Args[1:])
+
+	scores := CalculatePersent(orgName, repoName)
+
+	for _, v := range topCommenters(*scores) {
+		fmt.Printf("%s: %.0f%% of %d\n", v.author, v.percentPositive, v.totalComments)
 	}
 }
 
-func main() {
-	orgName, repoName := parseArgs(os.Args[1:])
-	sentimentComments := analyze(fetch(orgName, repoName))
+func CalculatePersent(orgName string, repoName string) *[]SentScore {
+	allComments := fetch(orgName, repoName)
+	sentimentComments := analyze(allComments)
 
 	commentsByAuthor := make(map[string][]SentComm)
 	for _, c := range sentimentComments {
@@ -73,9 +77,7 @@ func main() {
 		scores = append(scores, *NewSentScore(k, percentPositive, commentsByAuthor[k]))
 	}
 
-	for _, v := range topCommenters(scores) {
-		fmt.Printf("%s: %.0f%% of %d\n", v.author, v.percentPositive, v.totalComments)
-	}
+	return &scores
 }
 
 func topCommenters(scores []SentScore) (topCommenters []SentScore) {
@@ -94,7 +96,7 @@ func parseArgs(argv []string) (orgName, repoName string) {
 
 	if len(argv) == 1 && r.MatchString(argv[0]) {
 		dotOrSlash := func(c rune) bool { return c == '/' || c == '.' }
-		orgAndRepo := s.FieldsFunc(argv[0], dotOrSlash)
+		orgAndRepo := strings.FieldsFunc(argv[0], dotOrSlash)
 
 		orgName = orgAndRepo[0]
 		repoName = orgAndRepo[1]
@@ -108,7 +110,7 @@ func parseArgs(argv []string) (orgName, repoName string) {
 	return
 }
 
-func analyze(comments []github.PullRequestComment) []SentComm {
+func analyze(comments []*github.PullRequestComment) []SentComm {
 	analysisModel, _ := sentiment.Restore()
 
 	var sentComms []SentComm
@@ -120,12 +122,12 @@ func analyze(comments []github.PullRequestComment) []SentComm {
 	return sentComms
 }
 
-func fetch(orgName string, repoName string) []github.PullRequestComment {
+func fetch(orgName string, repoName string) []*github.PullRequestComment {
 	ghTokenSource := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: os.Getenv("GITHUB_API_TOKEN")})
 	client := github.NewClient(oauth2.NewClient(oauth2.NoContext, ghTokenSource))
 
 	nextPage := 1
-	var comments []github.PullRequestComment
+	var comments []*github.PullRequestComment
 
 	fileName := fmt.Sprintf("%s.%s.json", orgName, repoName)
 
@@ -135,11 +137,16 @@ func fetch(orgName string, repoName string) []github.PullRequestComment {
 	} else {
 		log.Println("GitHub")
 		for nextPage > 0 {
-			comms, resp, err := client.PullRequests.ListComments(orgName, repoName, 0,
+
+			ctx := context.TODO()
+
+			comms, resp, err := client.PullRequests.ListComments(ctx, orgName, repoName, 0,
 				&github.PullRequestListCommentsOptions{ListOptions: github.ListOptions{PerPage: 100, Page: nextPage}},
 			)
 
-			check(err)
+			if err != nil {
+				log.Fatalf("%+v", err)
+			}
 
 			log.Printf("%v (%v)\n", len(comms), resp.NextPage-1)
 
@@ -154,26 +161,39 @@ func fetch(orgName string, repoName string) []github.PullRequestComment {
 	return comments
 }
 
-func writeToFile(comments []github.PullRequestComment, fileName string) string {
+func writeToFile(comments []*github.PullRequestComment, fileName string) string {
 	json, err := json.Marshal(comments)
-	check(err)
+	if err != nil {
+		log.Fatalf("json.Marshall got err:%+v", err)
+	}
 
 	f, err := os.Create(fileName)
-	check(err)
+	if err != nil {
+		log.Fatalf("os.Create got err:%+v", err)
+	}
 	defer f.Close()
 
 	_, err = f.Write(json)
-	check(err)
+	if err != nil {
+		log.Fatalf("f.Write got err:%+v", err)
+	}
 
 	return (f.Name())
 }
 
-func readFromFile(fileName string) []github.PullRequestComment {
+func readFromFile(fileName string) []*github.PullRequestComment {
 	b, err := ioutil.ReadFile(fileName)
-	check(err)
+	if err != nil {
+		log.Fatalf("ioutil.ReadFile got err:%+v", err)
+	}
 
-	var comments []github.PullRequestComment
-	json.Unmarshal(b, &comments)
+	var rawComments []github.PullRequestComment
+	json.Unmarshal(b, &rawComments)
+
+	comments := make([]*github.PullRequestComment, len(rawComments))
+	for i := range rawComments {
+		comments[i] = &rawComments[i]
+	}
 
 	return comments
 }
